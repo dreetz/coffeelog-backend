@@ -9,6 +9,7 @@ class CoffeeBase(SQLModel):
     roast_date: date | None
     open_date: date | None
     price: float | None
+    country_of_origin: str | None
 
 
 class Coffee(CoffeeBase, table=True):
@@ -23,6 +24,7 @@ class CoffeeUpdate(CoffeeBase):
     roast_date: date | None = None
     open_date: date | None = None
     price: float | None = None
+    country_of_origin: str | None = None
 
 
 class CupBase(SQLModel):
