@@ -152,15 +152,36 @@ def perform_drink(user: models.User, session: SessionDep):
     return db_cup
 
 
-@app.get("/actions/count")
+@app.get("/actions/count/total")
 def get_coffee_count(session: SessionDep):
     db_cups = session.exec(select(func.count(models.Cup.id))).one()
     return db_cups
 
 
-@app.get("/actions/count/{username}")
+@app.get("/actions/count/total/{username}")
 def get_coffee_count_by_username(username: str, session: SessionDep):
     db_cups = session.exec(
         select(func.count(models.Cup.id)).where(models.Cup.username == username)
+    ).one()
+    return db_cups
+
+
+@app.get("/actions/count/today")
+def get_coffee_count(session: SessionDep):
+    db_cups = session.exec(
+        select(func.count(models.Cup.id)).where(
+            models.Cup.date_time >= datetime.date.today()
+        )
+    ).one()
+    return db_cups
+
+
+@app.get("/actions/count/today/{username}")
+def get_coffee_count_by_username(username: str, session: SessionDep):
+    db_cups = session.exec(
+        select(func.count(models.Cup.id)).where(
+            models.Cup.username == username,
+            models.Cup.date_time >= datetime.date.today(),
+        )
     ).one()
     return db_cups
