@@ -1,9 +1,10 @@
-FROM python:3.11-alpine
+FROM python:3.12-alpine
 LABEL authors="dennis"
 
 WORKDIR /app
 COPY . /app
 
-RUN pip install -r requirements.txt
+RUN pip install uv
+RUN uv sync
 
-CMD ["fastapi", "run"]
+CMD ["uv", "run", "fastapi", "run"]
