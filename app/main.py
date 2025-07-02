@@ -5,9 +5,8 @@ from fastapi import Depends, FastAPI, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-import models
-import schemas
-from database import get_session
+from app import models, schemas
+from app.database import get_session
 
 SessionDep = Annotated[Session, Depends(get_session)]
 
@@ -154,13 +153,13 @@ def perform_drink(user: schemas.User, session: SessionDep):
 
 
 @app.get("/actions/count/total")
-def get_coffee_count(session: SessionDep):
+def get_coffee_count_total(session: SessionDep):
     db_cups = session.scalars(select(func.count(models.Cup.id))).one()
     return db_cups
 
 
 @app.get("/actions/count/total/{username}")
-def get_coffee_count_by_username(username: str, session: SessionDep):
+def get_coffee_count_total_username(username: str, session: SessionDep):
     db_cups = session.scalars(
         select(func.count(models.Cup.id)).where(models.Cup.username == username)
     ).one()
@@ -168,7 +167,7 @@ def get_coffee_count_by_username(username: str, session: SessionDep):
 
 
 @app.get("/actions/count/today")
-def get_coffee_count(session: SessionDep):
+def get_coffee_count_today(session: SessionDep):
     db_cups = session.scalars(
         select(func.count(models.Cup.id)).where(
             models.Cup.date_time >= datetime.date.today()
@@ -178,7 +177,7 @@ def get_coffee_count(session: SessionDep):
 
 
 @app.get("/actions/count/today/{username}")
-def get_coffee_count_by_username(username: str, session: SessionDep):
+def get_coffee_count_today_username(username: str, session: SessionDep):
     db_cups = session.scalars(
         select(func.count(models.Cup.id)).where(
             models.Cup.username == username,

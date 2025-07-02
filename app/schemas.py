@@ -6,6 +6,7 @@ from pydantic import BaseModel
 class User(BaseModel):
     username: str
 
+
 class CoffeeBase(BaseModel):
     roasting_facility: str
     coffee_name: str
@@ -46,6 +47,3 @@ class CupUpdate(CupBase):
     date_time: datetime | None = None
     username: str | None = None
     coffee_id: int | None = None
-
-
-
