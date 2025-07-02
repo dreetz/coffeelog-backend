@@ -1,10 +1,11 @@
 FROM python:3.12-alpine
 LABEL authors="dennis"
 
-WORKDIR /app
-COPY . /app
+WORKDIR /server
+COPY . /server
 
 RUN pip install uv
 RUN uv sync
+RUN chmod +x ./start.sh
 
-CMD ["uv", "run", "fastapi", "run"]
+CMD ["/bin/sh", "./start.sh"]

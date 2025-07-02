@@ -1,8 +1,13 @@
-from sqlmodel import Field, SQLModel, Relationship
 from datetime import datetime, date
 
+from pydantic import BaseModel
 
-class CoffeeBase(SQLModel):
+
+class User(BaseModel):
+    username: str
+
+
+class CoffeeBase(BaseModel):
     roasting_facility: str
     coffee_name: str
     size_g: int
@@ -12,9 +17,8 @@ class CoffeeBase(SQLModel):
     country_of_origin: str | None
 
 
-class Coffee(CoffeeBase, table=True):
-    id: int | None = Field(default=None, primary_key=True)
-    cups: list["Cup"] = Relationship(back_populates="coffee")
+class Coffee(CoffeeBase):
+    id: int | None
 
 
 class CoffeeUpdate(CoffeeBase):
@@ -27,23 +31,19 @@ class CoffeeUpdate(CoffeeBase):
     country_of_origin: str | None = None
 
 
-class CupBase(SQLModel):
+class CupBase(BaseModel):
     date_time: datetime
     username: str
-    coffee_id: int = Field(foreign_key="coffee.id")
+    coffee_id: int
 
 
-class Cup(CupBase, table=True):
-    id: int | None = Field(default=None, primary_key=True)
+class Cup(CupBase):
+    id: int | None
 
-    coffee: Coffee | None = Relationship(back_populates="cups")
+    coffee: Coffee | None
 
 
 class CupUpdate(CupBase):
     date_time: datetime | None = None
     username: str | None = None
     coffee_id: int | None = None
-
-
-class User(SQLModel):
-    username: str
