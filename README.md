@@ -4,6 +4,10 @@ Backend for storing collected data from coffee counter.
 
 ## Changelog
 
+### 2025-07-02
+
+- Migrate from SQLModel to SQLAlchemy and Alembic
+
 ### 2025-07-01
 
 - Move repository to gitlab
