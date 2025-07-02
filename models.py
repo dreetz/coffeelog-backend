@@ -1,49 +1,36 @@
-from sqlmodel import Field, SQLModel, Relationship
 from datetime import datetime, date
 
-
-class CoffeeBase(SQLModel):
-    roasting_facility: str
-    coffee_name: str
-    size_g: int
-    roast_date: date | None
-    open_date: date | None
-    price: float | None
-    country_of_origin: str | None
+from sqlalchemy import ForeignKey
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
-class Coffee(CoffeeBase, table=True):
-    id: int | None = Field(default=None, primary_key=True)
-    cups: list["Cup"] = Relationship(back_populates="coffee")
+class Base(DeclarativeBase):
+    pass
 
 
-class CoffeeUpdate(CoffeeBase):
-    roasting_facility: str | None = None
-    coffee_name: str | None = None
-    size_g: int | None = None
-    roast_date: date | None = None
-    open_date: date | None = None
-    price: float | None = None
-    country_of_origin: str | None = None
+class Coffee(Base):
+    __tablename__ = "coffee"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    roasting_facility: Mapped[str]
+    coffee_name: Mapped[str]
+    size_g: Mapped[int]
+    roast_date: Mapped[date | None]
+    open_date: Mapped[date | None]
+    price: Mapped[float | None]
+    country_of_origin: Mapped[str | None]
+
+    cups: Mapped[list["Cup"]] = relationship(
+        back_populates="coffee",
+    )
 
 
-class CupBase(SQLModel):
-    date_time: datetime
-    username: str
-    coffee_id: int = Field(foreign_key="coffee.id")
+class Cup(Base):
+    __tablename__ = "cup"
 
+    id: Mapped[int] = mapped_column(primary_key=True)
+    date_time: Mapped[datetime]
+    username: Mapped[str]
+    coffee_id: Mapped[int] = mapped_column(ForeignKey("coffee.id"))
 
-class Cup(CupBase, table=True):
-    id: int | None = Field(default=None, primary_key=True)
-
-    coffee: Coffee | None = Relationship(back_populates="cups")
-
-
-class CupUpdate(CupBase):
-    date_time: datetime | None = None
-    username: str | None = None
-    coffee_id: int | None = None
-
-
-class User(SQLModel):
-    username: str
+    coffee: Mapped["Coffee"] = relationship(back_populates="cups")

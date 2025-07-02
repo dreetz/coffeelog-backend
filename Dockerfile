@@ -6,5 +6,6 @@ COPY . /app
 
 RUN pip install uv
 RUN uv sync
+RUN chmod +x ./start.sh
 
-CMD ["uv", "run", "fastapi", "run"]
+CMD ["/bin/sh", "./start.sh"]
