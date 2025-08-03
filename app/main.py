@@ -1,29 +1,22 @@
 import datetime
 from typing import Annotated
-from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Query
-from sqlmodel import Session, select
-from sqlalchemy import func
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
-import models
-from database import get_session, create_db_and_tables
+from app import models, schemas
+from app.database import get_session
 
 SessionDep = Annotated[Session, Depends(get_session)]
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    create_db_and_tables()
-    yield
-
-
-app = FastAPI(lifespan=lifespan)
+app = FastAPI()
 
 
 @app.post("/coffee/")
-def create_coffee(coffee: models.CoffeeBase, session: SessionDep) -> models.Coffee:
-    db_coffee = models.Coffee.model_validate(coffee)
+def create_coffee(coffee: schemas.CoffeeBase, session: SessionDep) -> schemas.Coffee:
+    db_coffee = models.Coffee(**coffee.model_dump())
     session.add(db_coffee)
     session.commit()
     session.refresh(db_coffee)
@@ -33,14 +26,14 @@ def create_coffee(coffee: models.CoffeeBase, session: SessionDep) -> models.Coff
 @app.get("/coffee/")
 def read_coffees(
     session: SessionDep, offset: int = 0, limit: Annotated[int, Query(le=100)] = 100
-) -> list[models.Coffee]:
-    coffee = session.exec(select(models.Coffee).offset(offset).limit(limit)).all()
-    return coffee
+) -> list[schemas.Coffee]:
+    coffee = session.scalars(select(models.Coffee).offset(offset).limit(limit)).all()
+    return list(coffee)
 
 
 @app.get("/coffee/latest")
 def read_latest_coffee_id(session: SessionDep):
-    coffee = session.exec(
+    coffee = session.scalars(
         select(models.Coffee).order_by(models.Coffee.id.desc())
     ).first()
     if not coffee:
@@ -49,7 +42,7 @@ def read_latest_coffee_id(session: SessionDep):
 
 
 @app.get("/coffee/{coffee_id}")
-def read_coffee(coffee_id: int, session: SessionDep) -> models.Coffee:
+def read_coffee(coffee_id: int, session: SessionDep) -> schemas.Coffee:
     coffee = session.get(models.Coffee, coffee_id)
     if not coffee:
         raise HTTPException(status_code=404, detail="Coffee not found.")
@@ -57,13 +50,17 @@ def read_coffee(coffee_id: int, session: SessionDep) -> models.Coffee:
 
 
 @app.patch("/coffee/{coffee_id}")
-def update_coffee(coffee_id: int, coffee: models.CoffeeUpdate, session: SessionDep):
-    coffee_db = session.get(models.Coffee, coffee_id)
+def update_coffee(coffee_id: int, coffee: schemas.CoffeeUpdate, session: SessionDep):
+    stmt = select(models.Coffee).where(models.Coffee.id == coffee_id)
+    coffee_db = session.scalars(stmt).first()
+
     if not coffee_db:
         raise HTTPException(status_code=404, detail="Coffee not found.")
     coffee_data = coffee.model_dump(exclude_unset=True)
-    coffee_db.sqlmodel_update(coffee_data)
-    session.add(coffee_db)
+
+    for key, value in coffee_data.items():
+        coffee_db.__setattr__(key, value)
+
     session.commit()
     session.refresh(coffee_db)
     return coffee_db
@@ -80,8 +77,8 @@ def delete_coffee(coffee_id: int, session: SessionDep):
 
 
 @app.post("/cups/")
-def create_cup(cup: models.CupBase, session: SessionDep) -> models.Cup:
-    db_cup = models.Cup.model_validate(cup)
+def create_cup(cup: schemas.CupBase, session: SessionDep) -> schemas.Cup:
+    db_cup = models.Cup(**cup.model_dump())
     session.add(db_cup)
     session.commit()
     session.refresh(db_cup)
@@ -91,13 +88,13 @@ def create_cup(cup: models.CupBase, session: SessionDep) -> models.Cup:
 @app.get("/cups/")
 def read_cups(
     session: SessionDep, offset: int = 0, limit: Annotated[int, Query(le=100)] = 100
-) -> list[models.Cup]:
-    cups = session.exec(select(models.Cup).offset(offset).limit(limit)).all()
-    return cups
+) -> list[schemas.Cup]:
+    cups = session.scalars(select(models.Cup).offset(offset).limit(limit)).all()
+    return list(cups)
 
 
 @app.get("/cups/{cup_id}")
-def read_cup(cup_id: int, session: SessionDep) -> models.Cup:
+def read_cup(cup_id: int, session: SessionDep) -> schemas.Cup:
     cup = session.get(models.Cup, cup_id)
     if not cup:
         raise HTTPException(status_code=404, detail="Cup not found.")
@@ -105,13 +102,17 @@ def read_cup(cup_id: int, session: SessionDep) -> models.Cup:
 
 
 @app.patch("/cups/{cup_id}")
-def update_cup(cup_id: int, cup: models.CupUpdate, session: SessionDep):
-    cup_db = session.get(models.Cup, cup_id)
+def update_cup(cup_id: int, cup: schemas.CupUpdate, session: SessionDep):
+    stmt = select(models.Cup).where(models.Cup.id == cup_id)
+    cup_db = session.scalars(stmt).first()
+
     if not cup_db:
         raise HTTPException(status_code=404, detail="Cup not found.")
     cup_data = cup.model_dump(exclude_unset=True)
-    cup_db.sqlmodel_update(cup_data)
-    session.add(cup_db)
+
+    for key, value in cup_data.items():
+        cup_db.__setattr__(key, value)
+
     session.commit()
     session.refresh(cup_db)
     return cup_db
@@ -128,11 +129,11 @@ def delete_cup(cup_id: int, session: SessionDep):
 
 
 @app.post("/actions/drink")
-def perform_drink(user: models.User, session: SessionDep):
+def perform_drink(user: schemas.User, session: SessionDep):
     """Shortcut function to add new entry in cups with given username."""
 
     # Load latest coffee id
-    db_coffee: models.Coffee = session.exec(
+    db_coffee: models.Coffee = session.scalars(
         select(models.Coffee).order_by(models.Coffee.id.desc())
     ).first()
 
@@ -140,12 +141,11 @@ def perform_drink(user: models.User, session: SessionDep):
         raise HTTPException(status_code=404, detail="No coffee in database.")
 
     # Create cup object and add it to database
-    cup = models.CupBase(
+    db_cup = models.Cup(
         username=user.username,
         coffee_id=db_coffee.id,
         date_time=datetime.datetime.now(),
     )
-    db_cup = models.Cup.model_validate(cup)
     session.add(db_cup)
     session.commit()
     session.refresh(db_cup)
@@ -153,22 +153,22 @@ def perform_drink(user: models.User, session: SessionDep):
 
 
 @app.get("/actions/count/total")
-def get_coffee_count(session: SessionDep):
-    db_cups = session.exec(select(func.count(models.Cup.id))).one()
+def get_coffee_count_total(session: SessionDep):
+    db_cups = session.scalars(select(func.count(models.Cup.id))).one()
     return db_cups
 
 
 @app.get("/actions/count/total/{username}")
-def get_coffee_count_by_username(username: str, session: SessionDep):
-    db_cups = session.exec(
+def get_coffee_count_total_username(username: str, session: SessionDep):
+    db_cups = session.scalars(
         select(func.count(models.Cup.id)).where(models.Cup.username == username)
     ).one()
     return db_cups
 
 
 @app.get("/actions/count/today")
-def get_coffee_count(session: SessionDep):
-    db_cups = session.exec(
+def get_coffee_count_today(session: SessionDep):
+    db_cups = session.scalars(
         select(func.count(models.Cup.id)).where(
             models.Cup.date_time >= datetime.date.today()
         )
@@ -177,8 +177,8 @@ def get_coffee_count(session: SessionDep):
 
 
 @app.get("/actions/count/today/{username}")
-def get_coffee_count_by_username(username: str, session: SessionDep):
-    db_cups = session.exec(
+def get_coffee_count_today_username(username: str, session: SessionDep):
+    db_cups = session.scalars(
         select(func.count(models.Cup.id)).where(
             models.Cup.username == username,
             models.Cup.date_time >= datetime.date.today(),
