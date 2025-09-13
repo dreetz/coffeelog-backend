@@ -2,6 +2,7 @@ import datetime
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -12,6 +13,13 @@ SessionDep = Annotated[Session, Depends(get_session)]
 
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
 
 
 @app.post("/coffee/")
@@ -25,7 +33,7 @@ def create_coffee(coffee: schemas.CoffeeBase, session: SessionDep) -> schemas.Co
 
 @app.get("/coffee/")
 def read_coffees(
-    session: SessionDep, offset: int = 0, limit: Annotated[int, Query(le=100)] = 100
+    session: SessionDep, offset: int | None = None, limit: int | None = None
 ) -> list[schemas.Coffee]:
     coffee = session.scalars(select(models.Coffee).offset(offset).limit(limit)).all()
     return list(coffee)
