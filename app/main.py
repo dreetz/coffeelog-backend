@@ -33,7 +33,7 @@ def create_coffee(coffee: schemas.CoffeeBase, session: SessionDep) -> schemas.Co
 
 @app.get("/coffee/")
 def read_coffees(
-    session: SessionDep, offset: int = 0, limit: Annotated[int, Query(le=100)] = 100
+    session: SessionDep, offset: int | None = None, limit: int | None = None
 ) -> list[schemas.Coffee]:
     coffee = session.scalars(select(models.Coffee).offset(offset).limit(limit)).all()
     return list(coffee)
