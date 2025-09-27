@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     DB_USER: str
     DB_KEY: str
     DB_SCHEMA: str
+    REDIS_URL: str
+    REDIS_PORT: int
+
 
 
 settings = Settings()
