@@ -7,6 +7,7 @@ Backend for storing collected data from coffee counter.
 ### 2025-09-27
 
 - Switch from sqlite to postgres
+- Add redis cache
 
 ### 2025-09-13
 
