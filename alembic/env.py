@@ -8,6 +8,8 @@ from alembic import context
 from app.models import Base
 import app.models
 
+from app.config import settings
+
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
@@ -30,10 +32,9 @@ target_metadata = Base.metadata
 
 
 def session_string():
-    sqlite_file_name = "data/database.db"
-    sqlite_url = f"sqlite:///{sqlite_file_name}"
+    url = f"postgresql://{settings.DB_USER}:{settings.DB_KEY}@{settings.DB_URL}/{settings.DB_SCHEMA}"
 
-    return sqlite_url
+    return url
 
 
 def run_migrations_offline() -> None:
@@ -77,7 +78,11 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            version_table="coffeelog_alembic_version",
+        )
 
         with context.begin_transaction():
             context.run_migrations()
