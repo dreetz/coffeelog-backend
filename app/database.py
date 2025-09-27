@@ -1,11 +1,14 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
+from app.config import settings
 
-sqlite_file_name = "../data/database.db"
-sqlite_url = f"sqlite:///{sqlite_file_name}"
+from sqlalchemy.pool import NullPool
 
-connect_args = {"check_same_thread": False}
-engine = create_engine(sqlite_url, connect_args=connect_args)
+url = f"postgresql://{settings.DB_USER}:{settings.DB_KEY}@{settings.DB_URL}/{settings.DB_SCHEMA}"
+con = create_engine(url, client_encoding="utf8", poolclass=NullPool)
+
+connect_args = {}
+engine = create_engine(url, connect_args=connect_args)
 
 
 def get_session():
