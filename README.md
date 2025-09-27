@@ -4,6 +4,10 @@ Backend for storing collected data from coffee counter.
 
 ## Changelog
 
+### 2025-09-27
+
+- Switch from sqlite to postgres
+
 ### 2025-09-13
 
 - Added CORS middleware
