@@ -9,12 +9,11 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import models, schemas
-from app.database import get_session
 from app.config import settings
+from app.database import engine
 
 from redis.asyncio import Redis
 
-SessionDep = Annotated[Session, Depends(get_session)]
 redis_client: Optional[Redis] = None
 
 
@@ -88,30 +87,32 @@ def key_today_user(user: str) -> str:
 
 @app.post("/coffee/")
 async def create_coffee(
-    coffee: schemas.CoffeeBase, session: SessionDep, r: Redis = Depends(get_redis)
+    coffee: schemas.CoffeeBase, r: Redis = Depends(get_redis)
 ) -> schemas.Coffee:
-    db_coffee = models.Coffee(**coffee.model_dump())
-    session.add(db_coffee)
-    session.commit()
-    session.refresh(db_coffee)
+    with Session(engine) as session:
+        db_coffee = models.Coffee(**coffee.model_dump())
+        session.add(db_coffee)
+        session.commit()
+        session.refresh(db_coffee)
 
-    k = key_latest()
-    await cache_del_json(r, k)
+        k = key_latest()
+        await cache_del_json(r, k)
 
-    return db_coffee
+        return db_coffee
 
 
 @app.get("/coffee/")
 def read_coffees(
-    session: SessionDep, offset: int | None = None, limit: int | None = None
+    offset: int | None = None, limit: int | None = None
 ) -> list[schemas.Coffee]:
-    coffee = session.scalars(select(models.Coffee).offset(offset).limit(limit)).all()
-    return list(coffee)
+    with Session(engine) as session:
+        coffee = session.scalars(select(models.Coffee).offset(offset).limit(limit)).all()
+        return list(coffee)
 
 
 @app.get("/coffee/latest", response_model=schemas.Coffee)
 async def read_latest_coffee_id(
-    session: SessionDep, response: Response, r: Redis = Depends(get_redis)
+    response: Response, r: Redis = Depends(get_redis)
 ):
     k = key_latest()
     cached = await cache_get_json(r, k)
@@ -120,62 +121,65 @@ async def read_latest_coffee_id(
         response.headers["x-cache"] = "hit"
         return cached
 
-    db_coffee = session.scalars(
-        select(models.Coffee).order_by(models.Coffee.id.desc())
-    ).first()
-    if not db_coffee:
-        raise HTTPException(status_code=404, detail="No coffee in database.")
+    with Session(engine) as session:
+        db_coffee = session.scalars(
+            select(models.Coffee).order_by(models.Coffee.id.desc())
+        ).first()
+        if not db_coffee:
+            raise HTTPException(status_code=404, detail="No coffee in database.")
 
-    coffee = schemas.Coffee(**db_coffee.__dict__)
-    response.headers["x-cache"] = "miss"
+        coffee = schemas.Coffee(**db_coffee.__dict__)
+        response.headers["x-cache"] = "miss"
 
-    await cache_set_json(r, k, coffee.model_dump(), ttl=300)
-    return coffee
+        await cache_set_json(r, k, coffee.model_dump(), ttl=300)
+        return coffee
 
 
 @app.get("/coffee/{coffee_id}")
-def read_coffee(coffee_id: int, session: SessionDep) -> schemas.Coffee:
-    coffee = session.get(models.Coffee, coffee_id)
-    if not coffee:
-        raise HTTPException(status_code=404, detail="Coffee not found.")
-    return coffee
+def read_coffee(coffee_id: int) -> schemas.Coffee:
+    with Session(engine) as session:
+        coffee = session.get(models.Coffee, coffee_id)
+        if not coffee:
+            raise HTTPException(status_code=404, detail="Coffee not found.")
+        return coffee
 
 
 @app.patch("/coffee/{coffee_id}")
 async def update_coffee(
     coffee_id: int,
     coffee: schemas.CoffeeUpdate,
-    session: SessionDep,
     r: Redis = Depends(get_redis),
 ):
-    stmt = select(models.Coffee).where(models.Coffee.id == coffee_id)
-    coffee_db = session.scalars(stmt).first()
+    with Session(engine) as session:
+        stmt = select(models.Coffee).where(models.Coffee.id == coffee_id)
+        coffee_db = session.scalars(stmt).first()
 
-    if not coffee_db:
-        raise HTTPException(status_code=404, detail="Coffee not found.")
-    coffee_data = coffee.model_dump(exclude_unset=True)
+        if not coffee_db:
+            raise HTTPException(status_code=404, detail="Coffee not found.")
+        coffee_data = coffee.model_dump(exclude_unset=True)
 
-    for key, value in coffee_data.items():
-        coffee_db.__setattr__(key, value)
+        for key, value in coffee_data.items():
+            coffee_db.__setattr__(key, value)
 
-    session.commit()
-    session.refresh(coffee_db)
+        session.commit()
+        session.refresh(coffee_db)
 
-    k = key_latest()
-    await cache_del_json(r, k)
+        k = key_latest()
+        await cache_del_json(r, k)
 
-    return coffee_db
+        return coffee_db
 
 
 @app.delete("/coffee/{coffee_id}")
 async def delete_coffee(
-    coffee_id: int, session: SessionDep, r: Redis = Depends(get_redis)
+    coffee_id: int, r: Redis = Depends(get_redis)
 ):
-    coffee = session.get(models.Coffee, coffee_id)
-    if not coffee:
-        raise HTTPException(status_code=404, detail="Coffee not found.")
-    session.delete(coffee)
-    session.commit()
+    with Session(engine) as session:
+        coffee = session.get(models.Coffee, coffee_id)
+        if not coffee:
+            raise HTTPException(status_code=404, detail="Coffee not found.")
+        session.delete(coffee)
+        session.commit()
 
     await cache_del_json(r, key_latest())
     await cache_del_json(r, key_today())
@@ -186,12 +190,13 @@ async def delete_coffee(
 
 @app.post("/cups/")
 async def create_cup(
-    cup: schemas.CupBase, session: SessionDep, r: Redis = Depends(get_redis)
+    cup: schemas.CupBase, r: Redis = Depends(get_redis)
 ) -> schemas.Cup:
-    db_cup = models.Cup(**cup.model_dump())
-    session.add(db_cup)
-    session.commit()
-    session.refresh(db_cup)
+    with Session(engine) as session:
+        db_cup = models.Cup(**cup.model_dump())
+        session.add(db_cup)
+        session.commit()
+        session.refresh(db_cup)
 
     await cache_del_json(r, key_today())
     await cache_del_json(r, key_today_user(cup.username))
@@ -203,45 +208,49 @@ async def create_cup(
 
 @app.get("/cups/")
 def read_cups(
-    session: SessionDep, offset: int = 0, limit: Annotated[int, Query(le=100)] = 100
+    offset: int = 0, limit: Annotated[int, Query(le=100)] = 100
 ) -> list[schemas.Cup]:
-    cups = session.scalars(select(models.Cup).offset(offset).limit(limit)).all()
-    return list(cups)
+    with Session(engine) as session:
+        cups = session.scalars(select(models.Cup).offset(offset).limit(limit)).all()
+        return list(cups)
 
 
 @app.get("/cups/{cup_id}")
-def read_cup(cup_id: int, session: SessionDep) -> schemas.Cup:
-    cup = session.get(models.Cup, cup_id)
-    if not cup:
-        raise HTTPException(status_code=404, detail="Cup not found.")
-    return cup
+def read_cup(cup_id: int) -> schemas.Cup:
+    with Session(engine) as session:
+        cup = session.get(models.Cup, cup_id)
+        if not cup:
+            raise HTTPException(status_code=404, detail="Cup not found.")
+        return cup
 
 
 @app.patch("/cups/{cup_id}")
-def update_cup(cup_id: int, cup: schemas.CupUpdate, session: SessionDep):
-    stmt = select(models.Cup).where(models.Cup.id == cup_id)
-    cup_db = session.scalars(stmt).first()
+def update_cup(cup_id: int, cup: schemas.CupUpdate):
+    with Session(engine) as session:
+        stmt = select(models.Cup).where(models.Cup.id == cup_id)
+        cup_db = session.scalars(stmt).first()
 
-    if not cup_db:
-        raise HTTPException(status_code=404, detail="Cup not found.")
-    cup_data = cup.model_dump(exclude_unset=True)
+        if not cup_db:
+            raise HTTPException(status_code=404, detail="Cup not found.")
+        cup_data = cup.model_dump(exclude_unset=True)
 
-    for key, value in cup_data.items():
-        cup_db.__setattr__(key, value)
+        for key, value in cup_data.items():
+            cup_db.__setattr__(key, value)
 
-    session.commit()
-    session.refresh(cup_db)
-    return cup_db
+        session.commit()
+        session.refresh(cup_db)
+        return cup_db
 
 
 @app.delete("/cups/{cup_id}")
-async def delete_cup(cup_id: int, session: SessionDep, r: Redis = Depends(get_redis)):
-    db_cup = session.get(models.Cup, cup_id)
-    if not db_cup:
-        raise HTTPException(status_code=404, detail="Cup not found.")
-    cup = schemas.Cup(**db_cup.__dict__)
-    session.delete(db_cup)
-    session.commit()
+async def delete_cup(cup_id: int, r: Redis = Depends(get_redis)):
+    with Session(engine) as session:
+        db_cup = session.get(models.Cup, cup_id)
+        if not db_cup:
+            raise HTTPException(status_code=404, detail="Cup not found.")
+        cup = schemas.Cup(**db_cup.__dict__)
+        session.delete(db_cup)
+        session.commit()
 
     await cache_del_json(r, key_today())
     await cache_del_json(r, key_today_user(cup.username))
@@ -253,26 +262,27 @@ async def delete_cup(cup_id: int, session: SessionDep, r: Redis = Depends(get_re
 
 @app.post("/actions/drink")
 async def perform_drink(
-    user: schemas.User, session: SessionDep, r: Redis = Depends(get_redis)
+    user: schemas.User, r: Redis = Depends(get_redis)
 ):
     """Shortcut function to add new entry in cups with given username."""
-    # Load latest coffee id
-    db_coffee: models.Coffee = session.scalars(
-        select(models.Coffee).order_by(models.Coffee.id.desc())
-    ).first()
+    with Session(engine) as session:
+        # Load latest coffee id
+        db_coffee: models.Coffee = session.scalars(
+            select(models.Coffee).order_by(models.Coffee.id.desc())
+        ).first()
 
-    if not db_coffee:
-        raise HTTPException(status_code=404, detail="No coffee in database.")
+        if not db_coffee:
+            raise HTTPException(status_code=404, detail="No coffee in database.")
 
-    # Create cup object and add it to database
-    db_cup = models.Cup(
-        username=user.username,
-        coffee_id=db_coffee.id,
-        date_time=datetime.datetime.now(),
-    )
-    session.add(db_cup)
-    session.commit()
-    session.refresh(db_cup)
+        # Create cup object and add it to database
+        db_cup = models.Cup(
+            username=user.username,
+            coffee_id=db_coffee.id,
+            date_time=datetime.datetime.now(),
+        )
+        session.add(db_cup)
+        session.commit()
+        session.refresh(db_cup)
 
     await cache_del_json(r, key_today())
     await cache_del_json(r, key_today_user(user.username))
@@ -284,7 +294,7 @@ async def perform_drink(
 
 @app.get("/actions/count/total", response_model=int)
 async def get_coffee_count_total(
-    session: SessionDep, response: Response, r: Redis = Depends(get_redis)
+   response: Response, r: Redis = Depends(get_redis)
 ):
     k = key_total()
     cached = await cache_get_json(r, k)
@@ -293,17 +303,17 @@ async def get_coffee_count_total(
         response.headers["x-cache"] = " hit"
         return cached
 
-    db_cups: int = session.scalars(select(func.count(models.Cup.id))).one()
-    response.headers["x-cache"] = " miss"
+    with Session(engine) as session:
+        db_cups: int = session.scalars(select(func.count(models.Cup.id))).one()
+        response.headers["x-cache"] = " miss"
 
-    await cache_set_json(r, k, db_cups, ttl=30)
-    return db_cups
+        await cache_set_json(r, k, db_cups, ttl=30)
+        return db_cups
 
 
 @app.get("/actions/count/total/{username}", response_model=int)
 async def get_coffee_count_total_username(
     username: str,
-    session: SessionDep,
     response: Response,
     r: Redis = Depends(get_redis),
 ):
@@ -314,18 +324,19 @@ async def get_coffee_count_total_username(
         response.headers["x-cached"] = "hit"
         return cached
 
-    db_cups: int = session.scalars(
-        select(func.count(models.Cup.id)).where(models.Cup.username == username)
-    ).one()
-    response.headers["x-cached"] = "miss"
+    with Session(engine) as session:
+        db_cups: int = session.scalars(
+            select(func.count(models.Cup.id)).where(models.Cup.username == username)
+        ).one()
+        response.headers["x-cached"] = "miss"
 
-    await cache_set_json(r, k, db_cups, ttl=30)
-    return db_cups
+        await cache_set_json(r, k, db_cups, ttl=30)
+        return db_cups
 
 
 @app.get("/actions/count/today", response_model=int)
 async def get_coffee_count_today(
-    session: SessionDep, response: Response, r: Redis = Depends(get_redis)
+    response: Response, r: Redis = Depends(get_redis)
 ):
     k = key_today()
     cached = await cache_get_json(r, k)
@@ -334,21 +345,21 @@ async def get_coffee_count_today(
         response.headers["x-cache"] = "hit"
         return cached
 
-    db_cups: int = session.scalars(
-        select(func.count(models.Cup.id)).where(
-            models.Cup.date_time >= datetime.date.today()
-        )
-    ).one()
-    response.headers["x-cache"] = "miss"
+    with Session(engine) as session:
+        db_cups: int = session.scalars(
+            select(func.count(models.Cup.id)).where(
+                models.Cup.date_time >= datetime.date.today()
+            )
+        ).one()
+        response.headers["x-cache"] = "miss"
 
-    await cache_set_json(r, k, db_cups, ttl=10)
-    return db_cups
+        await cache_set_json(r, k, db_cups, ttl=10)
+        return db_cups
 
 
 @app.get("/actions/count/today/{username}", response_model=int)
 async def get_coffee_count_today_username(
     username: str,
-    session: SessionDep,
     response: Response,
     r: Redis = Depends(get_redis),
 ):
@@ -359,13 +370,14 @@ async def get_coffee_count_today_username(
         response.headers["x-cache"] = "hit"
         return cached
 
-    db_cups: int = session.scalars(
-        select(func.count(models.Cup.id)).where(
-            models.Cup.username == username,
-            models.Cup.date_time >= datetime.date.today(),
-        )
-    ).one()
-    response.headers["x-cache"] = "miss"
+    with Session(engine) as session:
+        db_cups: int = session.scalars(
+            select(func.count(models.Cup.id)).where(
+                models.Cup.username == username,
+                models.Cup.date_time >= datetime.date.today(),
+            )
+        ).one()
+        response.headers["x-cache"] = "miss"
 
-    await cache_set_json(r, k, db_cups, ttl=30)
-    return db_cups
+        await cache_set_json(r, k, db_cups, ttl=30)
+        return db_cups
